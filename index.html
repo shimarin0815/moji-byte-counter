@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>文字数・バイト数カウンター</title>
+  <meta name="description" content="テキストの文字数・行数・段落数・UTF-8バイト数をリアルタイム計測するモダンなシングルページアプリ" />
+  <style>
+    :root{
+      --bg: #0b1020;
+      --panel: rgba(255,255,255,0.06);
+      --panel-strong: rgba(255,255,255,0.12);
+      --text: #e9edf2;
+      --muted: #9fb0c3;
+      --accent: #7cc4ff;
+      --ring: rgba(124,196,255,.5);
+      --success: #8be7c6;
+      --shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    @media (prefers-color-scheme: light){
+      :root{
+        --bg: #f7f9fc;
+        --panel: rgba(0,0,0,0.04);
+        --panel-strong: rgba(0,0,0,0.08);
+        --text: #0f172a;
+        --muted: #5b6b7b;
+        --accent: #1773e6;
+        --ring: rgba(23,115,230,.2);
+        --success: #0bbd87;
+        --shadow: 0 10px 30px rgba(16,24,40,.08), inset 0 1px 0 rgba(255,255,255,.5);
+      }
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", "YuGothic", Meiryo, sans-serif; color:var(--text); background: radial-gradient(1200px 600px at 10% -10%, rgba(124,196,255,.25), transparent 55%), radial-gradient(800px 500px at 110% 10%, rgba(11,189,135,.18), transparent 50%), var(--bg);
+      letter-spacing:.2px;
+    }
+
+    .wrap{max-width:1100px; margin:0 auto; padding:32px 20px 56px}
+    header{
+      display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px;
+    }
+    .title{font-size:clamp(20px,2.6vw,28px); font-weight:800; letter-spacing:.3px; display:flex; align-items:center; gap:12px}
+    .badge{font-size:12px; padding:6px 10px; background:linear-gradient(180deg,var(--panel-strong),transparent); border:1px solid var(--panel-strong); border-radius:999px; color:var(--muted)}
+    .desc{color:var(--muted); font-size:14px}
+
+    .grid{display:grid; grid-template-columns:1.2fr .8fr; gap:18px}
+    @media (max-width:960px){.grid{grid-template-columns:1fr;}}
+
+    .card{background:linear-gradient(180deg,var(--panel),transparent); border:1px solid var(--panel-strong); border-radius:18px; box-shadow:var(--shadow); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px)}
+
+    .editor{position:relative}
+    .toolbar{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--panel-strong)}
+    .toolbar .left{display:flex; gap:8px; align-items:center}
+
+    .mono{font-variant-ligatures: none;}
+    textarea{
+      width:100%; min-height:360px; resize:vertical; padding:18px; border:0; outline:0; background:transparent; color:var(--text); font-size:16px; line-height:1.8; caret-color: var(--accent);
+    }
+    textarea::placeholder{color:color-mix(in oklab, var(--muted), transparent 20%)}
+
+    .actions{display:flex; gap:10px}
+    .btn{appearance:none; border:1px solid var(--panel-strong); background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)); color:var(--text); padding:8px 12px; border-radius:12px; font-size:13px; cursor:pointer}
+    .btn:hover{border-color: color-mix(in oklab, var(--accent), transparent 65%)}
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{border-color: color-mix(in oklab, var(--accent), transparent 40%); box-shadow:0 0 0 4px var(--ring)}
+
+    .stats{padding:14px}
+    .stats-grid{display:grid; grid-template-columns:repeat(2, 1fr); gap:12px}
+    @media (min-width:720px){.stats-grid{grid-template-columns:repeat(3, 1fr)}}
+
+    .stat{padding:14px 14px 16px; border:1px solid var(--panel-strong); border-radius:14px; background:linear-gradient(180deg, rgba(255,255,255,.04), transparent); box-shadow:var(--shadow)}
+    .stat h3{margin:0 0 6px; font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted)}
+    .stat .value{font-size: clamp(22px, 3.4vw, 32px); font-weight:800; letter-spacing:.5px}
+
+    .mini{display:flex; gap:10px; align-items:center; color:var(--muted); font-size:12px; margin-top:10px}
+    .mini .dot{width:8px;height:8px;border-radius:50%;background:var(--success); box-shadow:0 0 0 4px color-mix(in oklab, var(--success), transparent 75%)}
+
+    footer{margin-top:20px; color:var(--muted); font-size:12px; display:flex; gap:10px; align-items:center}
+    code.kbd{padding:.2em .5em; border:1px solid var(--panel-strong); border-radius:8px; background:linear-gradient(180deg,var(--panel),transparent); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:.9em}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="title">文字数・バイト数カウンター <span class="badge">Single File</span></div>
+        <p class="desc">テキストを入力すると、リアルタイムで <strong>文字数</strong> / <strong>空白除く文字数</strong> / <strong>行数</strong> / <strong>段落数</strong> / <strong>UTF-8バイト数</strong> をカウントします。</p>
+      </div>
+    </header>
+
+    <section class="grid" role="main">
+      <!-- Editor -->
+      <div class="card editor">
+        <div class="toolbar">
+          <div class="left mini"><span class="dot" aria-hidden="true"></span>リアルタイム計測中</div>
+          <div class="actions">
+            <button class="btn" id="clearBtn" title="入力を消去">クリア</button>
+            <button class="btn" id="copyBtn" title="テキストをコピー">コピー</button>
+          </div>
+        </div>
+        <textarea id="input" class="mono" placeholder="ここに文章を入力 / 貼り付けしてください。絵文字や日本語も正しく数えます（例：👩🏽‍💻、が、などの合成文字）。"></textarea>
+      </div>
+
+      <!-- Stats -->
+      <div class="card stats" aria-live="polite">
+        <div class="stats-grid">
+          <div class="stat"><h3>文字数</h3><div class="value" id="charAll">0</div></div>
+          <div class="stat"><h3>空白除く文字数</h3><div class="value" id="charNoWs">0</div></div>
+          <div class="stat"><h3>行数</h3><div class="value" id="lines">0</div></div>
+          <div class="stat"><h3>段落数</h3><div class="value" id="paras">0</div></div>
+          <div class="stat"><h3>バイト数 (UTF‑8)</h3><div class="value" id="bytes">0</div></div>
+          <div class="stat"><h3>最終更新</h3><div class="value" id="updated">–</div></div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div>ヒント: VS Code の <code class="kbd">Alt</code>+<code class="kbd">Z</code> で行の折り返し、<code class="kbd">Ctrl</code>+<code class="kbd">Shift</code>+<code class="kbd">V</code> でプレビューが便利です。</div>
+    </footer>
+  </div>
+
+  <script>
+    // ===== Utilities =====
+    const $ = (id)=>document.getElementById(id);
+    const inputEl = $("input");
+    const fields = { charAll:$("charAll"), charNoWs:$("charNoWs"), lines:$("lines"), paras:$("paras"), bytes:$("bytes"), updated:$("updated") };
+
+    // Grapheme-safe character counting (絵文字や結合文字を1文字として数える)
+    const segmenter = (()=>{
+      try { return new Intl.Segmenter('ja', { granularity:'grapheme' }); } catch(e){ return null; }
+    })();
+    function countGraphemes(str){
+      if (!str) return 0;
+      if (segmenter && segmenter.segment){
+        let c=0; for (const _ of segmenter.segment(str)) c++; return c;
+      }
+      // Fallback: code points (結合文字は別扱いになる可能性があります)
+      return Array.from(str).length;
+    }
+
+    // Remove all kinds of whitespace (半角/全角スペース、改行、タブ等)
+    function removeAllWhitespace(str){
+      return str.replace(/[\u0009-\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, '');
+    }
+
+    function countLines(str){
+      if (!str) return 0;
+      // CRLF / CR / LF 全対応
+      return str.split(/\r\n|\r|\n/).length;
+    }
+
+    function countParagraphs(str){
+      if (!str) return 0;
+      // 空行(1行以上の連続する空白行)で区切られたブロックを段落とみなす
+      const blocks = str.split(/\r?\n\s*\r?\n/g).map(s=>s.trim()).filter(Boolean);
+      return blocks.length || (str.trim() ? 1 : 0);
+    }
+
+    function utf8Bytes(str){
+      return new TextEncoder().encode(str).length;
+    }
+
+    function fmt(n){ return Number(n).toLocaleString('ja-JP'); }
+    function now(){
+      const d = new Date();
+      return d.toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    }
+
+    function update(){
+      const t = inputEl.value;
+      fields.charAll.textContent = fmt(countGraphemes(t));
+      fields.charNoWs.textContent = fmt(countGraphemes(removeAllWhitespace(t)));
+      fields.lines.textContent = fmt(countLines(t));
+      fields.paras.textContent = fmt(countParagraphs(t));
+      fields.bytes.textContent = fmt(utf8Bytes(t));
+      fields.updated.textContent = now();
+      // autosave
+      try{ localStorage.setItem('counter:text', t); }catch(_){ }
+    }
+
+    // ===== Events =====
+    inputEl.addEventListener('input', update);
+    $("clearBtn").addEventListener('click', ()=>{ inputEl.value=''; update(); inputEl.focus(); });
+    $("copyBtn").addEventListener('click', async ()=>{
+      try{
+        await navigator.clipboard.writeText(inputEl.value);
+        const old = event.target.textContent; event.target.textContent = 'コピーしました';
+        setTimeout(()=> event.target.textContent = old, 1200);
+      }catch{ alert('コピーできませんでした'); }
+    });
+
+    // 初期化
+    (function init(){
+      try{ const saved = localStorage.getItem('counter:text'); if (saved) inputEl.value = saved; }catch(_){ }
+      update();
+      // フォーカス
+      setTimeout(()=> inputEl.focus(), 60);
+    })();
+  </script>
+</body>
+</html>
